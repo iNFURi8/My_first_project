@@ -1,0 +1,93 @@
+import torch
+import numpy as np
+from torch import nn
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.datasets import make_moons
+
+X_moons, y_moons = make_moons(n_samples=1000, random_state=42)
+
+X_moons = torch.from_numpy(X_moons).float()
+y_moons = torch.from_numpy(y_moons).long()
+
+X_train, X_test, y_train, y_test = train_test_split(X_moons, y_moons, test_size=0.2, random_state=42)
+
+class MulticlassClassification(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.Linear_Layer_Stack = nn.Sequential(
+            nn.Linear(in_features=2, out_features=8),
+            nn.ReLU(),
+            nn.Linear(in_features=8, out_features=8),
+            nn.ReLU(),
+            nn.Linear(in_features=8, out_features=8),
+            nn.ReLU(),
+            nn.Linear(in_features=8, out_features=3)
+        )
+
+    def forward(self, x):
+        return self.Linear_Layer_Stack(x)
+
+model_0 = MulticlassClassification()
+
+loss_fn = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.SGD(model_0.parameters(), lr=0.1)
+
+def accuracy_fn(y_pred, y_true):
+    y_pred_class = torch.argmax(y_pred, dim=1)
+    correct_predictions = torch.eq(y_pred_class, y_true).sum().item()
+    accuracy = (correct_predictions / len(y_true)) * 100
+    return accuracy
+
+def plot_decision_boundary(model, X, y):
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    
+    xx, yy = torch.meshgrid(torch.arange(x_min, x_max, 0.01),
+                            torch.arange(y_min, y_max, 0.01))
+    
+    grid_points = torch.cat((xx.flatten().unsqueeze(1), yy.flatten().unsqueeze(1)), dim=1)
+    
+    model.eval()
+    with torch.inference_mode():
+        Z = model(grid_points.float()).detach().numpy()
+    
+    Z = np.argmax(Z, axis=1).reshape(xx.shape)
+
+    plt.contourf(xx, yy, Z, alpha=0.8)
+    plt.scatter(X[:, 0], X[:, 1], c=y, edgecolors='k', marker='o')
+    plt.xlabel("Feature 1")
+    plt.ylabel("Feature 2")
+    plt.title("Decision Boundary")
+    plt.show()
+
+torch.manual_seed(42)
+epochs = 370
+
+for epoch in range(epochs):
+
+    model_0.train()
+    
+    y_logits = model_0(X_train)
+    y_preds = torch.softmax(y_logits, dim=1)
+    
+    loss = loss_fn(y_logits, y_train)
+    acc = accuracy_fn(y_pred=y_preds, y_true=y_train)
+    
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    model_0.eval()
+    with torch.inference_mode():
+        test_logits = model_0(X_test)
+        test_preds = torch.softmax(test_logits, dim=1)
+    
+    test_loss = loss_fn(test_logits, y_test)
+    test_acc = accuracy_fn(y_pred=test_preds, y_true=y_test)
+
+    if epoch % 10 == 0:
+        print(f"Epoch: {epoch} | Loss: {loss:.5f}, Acc: {acc:.2f}% | Test Loss: {test_loss:.5f}, Test Acc: {test_acc:.2f}%")
+
+
+plot_decision_boundary(model_0, X_moons, y_moons)
